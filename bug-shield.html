@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bug Shield · 버그 쉴드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --bg:#eef8f4;
+    --bg-deep:#dff1ea;
+    --surface:#ffffff;
+    --primary:#0f7a93;
+    --primary-dark:#0b5c70;
+    --primary-light:#bfe9ef;
+    --green:#2fae72;
+    --green-light:#c8f0dd;
+    --warn:#ffb238;
+    --warn-light:#fff1d2;
+    --danger:#ff5f5f;
+    --danger-light:#ffdede;
+    --ink:#0f2e2b;
+    --ink-soft:#5c7d78;
+    --ink-faint:#93b0aa;
+    --line:#dcefe6;
+    --radius-lg:26px;
+    --radius-md:18px;
+    --radius-sm:12px;
+    --shadow: 0 10px 28px -12px rgba(15,58,54,0.18);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Noto Sans KR', sans-serif;
+    background: var(--bg);
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:0;
+    color:var(--ink);
+  }
+  .display{ font-family:'Jua', 'Noto Sans KR', sans-serif; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  /* ---- app panel (no device chrome) ---- */
+  .app-shell{
+    width:100%;
+    max-width:460px;
+    min-height:100vh;
+    background:var(--surface);
+    overflow:hidden;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    box-shadow: 0 0 60px -20px rgba(11,45,42,0.12);
+  }
+
+  .screens{ flex:1; position:relative; overflow:hidden; }
+  .screen{
+    position:absolute; inset:0;
+    overflow-y:auto;
+    padding:18px 18px 100px;
+    display:none;
+    animation: fadeIn .35s ease;
+  }
+  .screen.active{ display:block; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .screen::-webkit-scrollbar{ width:0; }
+
+  /* ---- shared bits ---- */
+  .app-title{
+    display:flex; align-items:center; gap:8px; margin:6px 0 2px;
+  }
+  .app-title .logo-badge{
+    width:34px; height:34px; border-radius:12px;
+    background:linear-gradient(145deg, var(--primary), var(--green));
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow: 0 6px 14px -6px rgba(15,122,147,.6);
+  }
+  .app-title .logo-badge svg{ width:19px; height:19px; }
+  .app-title h1{ font-family:'Jua'; font-size:20px; color:var(--primary-dark); letter-spacing:.2px; }
+  .back-btn{
+    width:32px; height:32px; border-radius:50%; border:1.5px solid var(--line); background:var(--surface);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink); flex-shrink:0;
+  }
+  .back-btn svg{ width:16px; height:16px; }
+
+  /* ---- AI 해충 판별 ---- */
+  .idcheck-entry-card{
+    display:flex; align-items:center; gap:13px; padding:15px 15px; margin-top:14px; cursor:pointer;
+  }
+  .idcheck-entry-icon{
+    width:46px; height:46px; border-radius:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--primary-light), var(--green-light)); color:var(--primary-dark);
+  }
+  .idcheck-entry-icon svg{ width:22px; height:22px; }
+  .idcheck-entry-title{ font-size:13.5px; font-weight:700; }
+  .idcheck-entry-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:3px; line-height:1.4; }
+  .idcheck-entry-arrow{ width:18px; height:18px; margin-left:auto; color:var(--ink-faint); flex-shrink:0; }
+
+  .idcheck-photo-box{
+    margin-top:14px; height:260px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    border:1.5px dashed var(--line); background:var(--bg-deep); overflow:hidden; position:relative;
+  }
+  .idcheck-placeholder{ display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--ink-faint); padding:0 30px; text-align:center; }
+  .idcheck-placeholder-icon{ width:38px; height:38px; }
+  .idcheck-placeholder-text{ font-size:12.5px; font-weight:600; line-height:1.5; }
+  #idcheck-preview-img{ width:100%; height:100%; object-fit:cover; }
+
+  .idcheck-result-card{ margin-top:16px; padding:18px; }
+  .idcheck-result-head{ display:flex; align-items:center; gap:12px; }
+  .idcheck-result-icon{ width:46px; height:46px; border-radius:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .idcheck-result-icon svg{ width:23px; height:23px; }
+  .idcheck-result-name{ font-size:14.5px; font-weight:700; }
+  .idcheck-result-conf{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .idcheck-conf-bar{ height:7px; border-radius:100px; background:var(--line); margin-top:12px; overflow:hidden; }
+  .idcheck-conf-fill{ height:100%; background:linear-gradient(90deg, var(--primary), var(--green)); border-radius:100px; transition:width .5s ease; }
+  .idcheck-section-title{ font-size:12px; font-weight:700; color:var(--ink); margin:16px 0 8px; }
+  .idcheck-result-card ul{ margin:0; padding-left:18px; }
+  .idcheck-result-card li{ font-size:12.5px; color:var(--ink-soft); line-height:1.7; }
+  .idcheck-disclaimer{ font-size:10.5px; color:var(--ink-faint); margin-top:14px; line-height:1.5; }
+  .idcheck-loading{ display:flex; flex-direction:column; align-items:center; gap:10px; padding:24px 10px; color:var(--ink-soft); font-size:12.5px; font-weight:600; }
+  .idcheck-spinner{
+    width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--primary);
+    animation: spin-loader .8s linear infinite;
+  }
+  @keyframes spin-loader{ to{ transform:rotate(360deg); } }
+  .idcheck-notfound{ text-align:center; padding:20px 14px; color:var(--ink-soft); font-size:12.5px; font-weight:600; line-height:1.6; }
+
+  .location-row{
+    display:flex; align-items:center; gap:5px; color:var(--ink-soft); font-size:12.5px; font-weight:500; margin:2px 0 16px 3px;
+  }
+  .location-row svg{ width:13px; height:13px; }
+
+  .card{
+    background:var(--surface);
+    border-radius:var(--radius-md);
+    box-shadow:var(--shadow);
+    border:1px solid var(--line);
+  }
+  .section-label{
+    font-size:13.5px; font-weight:700; color:var(--ink); margin:22px 2px 10px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .section-label span.more{ font-size:11.5px; font-weight:600; color:var(--primary); }
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px;
+    padding:5px 11px; border-radius:100px; font-size:11.5px; font-weight:700;
+  }
+  .pill.green{ background:var(--green-light); color:#1c7a4e; }
+  .pill.warn{ background:var(--warn-light); color:#a06a00; }
+  .pill.danger{ background:var(--danger-light); color:#c23434; }
+
+  /* ---- RADAR (signature element) ---- */
+  .radar-card{
+    padding:20px 18px 18px;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    background: linear-gradient(180deg, #ffffff 0%, #f3fbf9 100%);
+  }
+  .radar-wrap{
+    position:relative; width:190px; height:190px; margin:4px 0 2px;
+  }
+  .radar-ring{
+    position:absolute; border-radius:50%; border:1.5px solid var(--primary-light);
+    top:50%; left:50%; transform:translate(-50%,-50%);
+  }
+  .radar-ring.r1{ width:190px; height:190px; }
+  .radar-ring.r2{ width:135px; height:135px; }
+  .radar-ring.r3{ width:80px; height:80px; }
+  .radar-sweep{
+    position:absolute; top:50%; left:50%; width:95px; height:95px;
+    transform-origin:0% 0%;
+    background: conic-gradient(from 0deg, rgba(15,122,147,0.35), transparent 32%);
+    border-radius: 0 100% 0 0;
+    animation: spin 4.5s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .radar-center{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:58px; height:58px; border-radius:50%;
+    background:var(--surface); box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; z-index:5;
+    border:2px solid var(--warn);
+  }
+  .radar-center .emoji{ font-size:20px; line-height:1; }
+  .radar-center .lvl{ font-size:9.5px; font-weight:700; color:var(--ink-soft); margin-top:1px; }
+  .blip{
+    position:absolute; width:16px; height:16px; display:flex; align-items:center; justify-content:center;
+    animation: blip-pulse 2.2s ease-in-out infinite; cursor:pointer; z-index:6;
+  }
+  .blip::after{
+    content:''; position:absolute; inset:-9px; border-radius:50%; border:1.5px solid transparent; transition:border-color .15s ease;
+  }
+  .blip.picked::after{ border-color:currentColor; }
+  .blip.picked{ animation-play-state:paused; transform:scale(1.2); opacity:1; }
+  .blip svg{ width:14px; height:14px; }
+  @keyframes blip-pulse{ 0%,100%{ opacity:.55; transform:scale(.9);} 50%{ opacity:1; transform:scale(1.12);} }
+  .b1{ top:22px; left:130px; animation-delay:.2s; }
+  .b2{ top:118px; left:20px; animation-delay:1s; }
+  .b3{ top:150px; left:135px; animation-delay:1.6s; }
+
+  .radar-caption{ text-align:center; }
+  .radar-caption .big{ font-family:'Jua'; font-size:17px; color:var(--ink); }
+  .radar-caption .small{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+  .radar-info{
+    display:none; align-items:center; gap:11px; width:100%; margin-top:14px; padding:12px 13px;
+    background:var(--bg-deep); border-radius:14px; text-align:left;
+    animation: fadeIn .25s ease;
+  }
+  .radar-info.show{ display:flex; }
+  .radar-info .ic{
+    width:36px; height:36px; border-radius:11px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  }
+  .radar-info .ic svg{ width:19px; height:19px; }
+  .radar-info .txt{ flex:1; min-width:0; }
+  .radar-info .t1{ font-size:12.5px; font-weight:700; color:var(--ink); }
+  .radar-info .t2{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+
+  /* ---- weather/risk row ---- */
+  .row2{ display:flex; gap:12px; margin-top:14px; }
+  .weather-source-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:16px; padding:0 2px;
+  }
+  #weather-source-label{ font-size:11px; font-weight:600; color:var(--ink-faint); }
+  .weather-settings-btn{
+    display:flex; align-items:center; gap:5px; background:none; border:1.5px solid var(--line); color:var(--primary-dark);
+    font-family:'Noto Sans KR'; font-weight:700; font-size:11px; padding:6px 11px; border-radius:100px; cursor:pointer;
+  }
+  .weather-settings-btn svg{ width:13px; height:13px; }
+  .stat-card{ flex:1; padding:14px 14px 15px; }
+  .stat-card .top{ display:flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:11.5px; font-weight:600; }
+  .stat-card .top svg{ width:14px; height:14px; }
+  .stat-card .val{ font-family:'Jua'; font-size:24px; margin-top:8px; color:var(--ink); }
+  .stat-card .sub{ font-size:11px; color:var(--ink-faint); margin-top:2px; font-weight:500; }
+
+  /* alerts */
+  .alert-item{
+    display:flex; gap:11px; align-items:flex-start; padding:13px 14px; margin-bottom:9px;
+  }
+  .alert-item .ic{
+    width:36px; height:36px; border-radius:11px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .alert-item .ic.warn{ background:var(--warn-light); }
+  .alert-item .ic.danger{ background:var(--danger-light); }
+  .alert-item .ic svg{ width:19px; height:19px; }
+  .alert-item .txt .t1{ font-size:13px; font-weight:700; color:var(--ink); }
+  .alert-item .txt .t2{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .alert-item .time{ margin-left:auto; font-size:10.5px; color:var(--ink-faint); flex-shrink:0; }
+
+  /* news */
+  .news-scroll{ display:flex; gap:12px; overflow-x:auto; padding:2px 2px 8px; }
+  .news-scroll::-webkit-scrollbar{ display:none; }
+  .news-card{ min-width:200px; padding:14px; flex-shrink:0; }
+  .news-card .date{ font-size:10.5px; color:var(--ink-faint); font-weight:600; }
+  .news-card .title{ font-size:13.5px; font-weight:700; margin:6px 0 5px; line-height:1.4; }
+  .news-card .summary{ font-size:11.5px; color:var(--ink-soft); line-height:1.5; }
+
+  /* buttons */
+  .btn{
+    border:none; cursor:pointer; font-family:'Noto Sans KR'; font-weight:700;
+    border-radius:100px; padding:12px 18px; font-size:13.5px;
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .btn.primary{ background:linear-gradient(135deg, var(--primary), var(--primary-dark)); color:white; box-shadow:0 8px 18px -8px rgba(15,122,147,.6); }
+  .btn.ghost{ background:var(--surface); color:var(--primary-dark); border:1.5px solid var(--line); }
+  .btn.block{ width:100%; }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* ---- MAP screen ---- */
+  .search-bar{
+    display:flex; align-items:center; gap:9px; background:var(--surface); border:1.5px solid var(--line);
+    border-radius:100px; padding:11px 16px; margin-top:4px; box-shadow:var(--shadow);
+  }
+  .search-bar svg{ width:17px; height:17px; flex-shrink:0; }
+  .search-bar input{
+    border:none; outline:none; flex:1; font-family:'Noto Sans KR'; font-size:13px; color:var(--ink); background:transparent;
+  }
+  .search-bar input::placeholder{ color:var(--ink-faint); }
+  .filter-chip-row{ display:flex; gap:7px; overflow-x:auto; padding:2px 1px 4px; margin-top:11px; }
+  .filter-chip-row::-webkit-scrollbar{ display:none; }
+  .filter-chip{
+    flex-shrink:0; border:1.5px solid var(--line); background:var(--surface); color:var(--ink-soft);
+    font-family:'Noto Sans KR'; font-weight:700; font-size:11.5px; padding:7px 13px; border-radius:100px; cursor:pointer;
+    white-space:nowrap;
+  }
+  .filter-chip.active{ background:var(--primary); border-color:var(--primary); color:white; }
+  #tourist-results{ margin-top:10px; }
+  #tourist-results .hint-label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); margin:4px 2px 8px; }
+  .spot-item{
+    display:flex; align-items:center; gap:11px; padding:12px 13px; margin-bottom:8px; cursor:pointer;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .spot-item:active{ transform:scale(.98); }
+  .spot-item.selected{ border-color:var(--primary); }
+  .spot-item .sp-ic{
+    width:38px; height:38px; border-radius:11px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  }
+  .spot-item .sp-ic svg{ width:19px; height:19px; }
+  .spot-item .sp-info{ flex:1; min-width:0; }
+  .spot-item .sp-name{ font-size:13px; font-weight:700; }
+  .spot-item .sp-cat{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .spot-empty{ text-align:center; padding:22px 10px; color:var(--ink-faint); font-size:12.5px; font-weight:600; }
+
+  /* ---- real leaflet map ---- */
+  .map-real-wrap{
+    position:relative; width:100%; height:340px; border-radius:var(--radius-md);
+    overflow:hidden; margin-top:8px; border:1px solid var(--line); box-shadow:var(--shadow);
+  }
+  #real-map{ width:100%; height:100%; background:var(--bg-deep); }
+  .locate-btn{
+    position:absolute; right:12px; bottom:12px; width:42px; height:42px; border-radius:50%;
+    background:var(--surface); border:1.5px solid var(--line); box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:500; color:var(--primary-dark);
+  }
+  .locate-btn svg{ width:20px; height:20px; }
+  .lf-pin-wrap{ display:flex; flex-direction:column; align-items:center; animation: poi-drop .35s ease; }
+  @keyframes poi-drop{ from{ transform:translateY(-10px); opacity:0;} to{ transform:translateY(0); opacity:1;} }
+  .lf-pin{
+    width:30px; height:30px; border-radius:50% 50% 50% 0; transform:rotate(-45deg);
+    display:flex; align-items:center; justify-content:center; box-shadow:0 6px 14px -6px rgba(11,45,42,.5);
+    border:2px solid white;
+  }
+  .lf-pin svg{ width:14px; height:14px; transform:rotate(45deg); color:white; }
+  .lf-pin-label{
+    margin-top:3px; background:var(--ink); color:white; font-size:9.5px; font-weight:700; padding:3px 8px;
+    border-radius:100px; white-space:nowrap;
+  }
+  .map-legend{ display:flex; gap:14px; margin-top:12px; padding:0 2px; }
+  .map-legend .li{ display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--ink-soft); }
+  .map-legend .dot{ width:9px; height:9px; border-radius:50%; }
+  .zone-list-item{ display:flex; align-items:flex-start; gap:12px; padding:13px 14px; margin-bottom:9px; }
+  .zone-list-item .tag{ width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+  .zone-list-item .ric{
+    width:36px; height:36px; border-radius:11px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  }
+  .zone-list-item .ric svg{ width:18px; height:18px; }
+  .zone-list-item .nm{ font-size:13px; font-weight:700; }
+  .zone-list-item .lv{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+  .zone-list-item .desc{ font-size:11.5px; color:var(--ink-soft); margin-top:4px; line-height:1.5; }
+  .region-subheader{
+    font-size:11.5px; font-weight:700; color:var(--primary-dark); margin:14px 2px 8px;
+    padding-bottom:4px; border-bottom:1.5px solid var(--line);
+  }
+  .region-subheader:first-child{ margin-top:2px; }
+
+  /* ---- REPORT screen ---- */
+  .report-item{ padding:14px 15px; margin-bottom:11px; }
+  .report-item .head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .report-item .title{ font-size:13.5px; font-weight:700; line-height:1.4; }
+  .report-item .body{ font-size:12px; color:var(--ink-soft); margin:7px 0 9px; line-height:1.55; }
+  .report-item .meta{ display:flex; align-items:center; gap:8px; font-size:11px; color:var(--ink-faint); font-weight:600; }
+  .report-item .meta svg{ width:11px; height:11px; }
+  .fab{
+    position:absolute; right:20px; bottom:82px; width:52px; height:52px; border-radius:50%;
+    background:linear-gradient(135deg, var(--primary), var(--green)); color:white; border:none;
+    box-shadow:0 12px 22px -8px rgba(15,122,147,.6); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; z-index:20;
+  }
+  .fab svg{ width:22px; height:22px; }
+  .form-overlay{
+    position:absolute; inset:0; background:rgba(15,46,43,0.42); z-index:60;
+    display:none; align-items:flex-end; justify-content:center;
+  }
+  .form-overlay.open{ display:flex; }
+  .form-sheet{
+    background:var(--surface); width:100%; border-radius:26px 26px 0 0; padding:22px 20px 26px;
+    animation: slideUp .3s ease;
+  }
+  @keyframes slideUp{ from{ transform:translateY(30px); opacity:0;} to{ transform:translateY(0); opacity:1;} }
+  .form-sheet h3{ font-family:'Jua'; font-size:17px; margin-bottom:14px; }
+  .weather-help-text{ font-size:11.5px; color:var(--ink-soft); line-height:1.6; margin:-6px 0 14px; }
+  .field{ margin-bottom:12px; }
+  .field label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:5px; display:block; }
+  .field input, .field textarea{
+    width:100%; border:1.5px solid var(--line); border-radius:12px; padding:10px 12px; font-family:'Noto Sans KR';
+    font-size:13px; color:var(--ink); background:#f8fcfb; resize:none;
+  }
+  .field textarea{ height:70px; }
+  .field input:focus, .field textarea:focus{ outline:none; border-color:var(--primary-light); }
+  .form-actions{ display:flex; gap:10px; margin-top:6px; }
+
+  /* ---- QUIZ screen ---- */
+  .diff-card{
+    padding:16px; display:flex; align-items:center; gap:13px; margin-bottom:12px; cursor:pointer;
+    transition:transform .15s ease;
+  }
+  .diff-card:active{ transform:scale(.98); }
+  .diff-card .badge{
+    width:44px; height:44px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    font-family:'Jua'; font-size:15px; color:white; flex-shrink:0;
+  }
+  .diff-card .info .t{ font-size:14px; font-weight:700; }
+  .diff-card .info .d{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .diff-card .arrow{ margin-left:auto; color:var(--ink-faint); }
+
+  .quiz-progress{ display:flex; gap:6px; margin:14px 0 4px; }
+  .quiz-progress .seg{ flex:1; height:6px; border-radius:100px; background:var(--line); }
+  .quiz-progress .seg.done{ background:var(--green); }
+  .quiz-points-chip{
+    display:inline-flex; align-items:center; gap:6px; background:var(--green-light); color:#1c7a4e;
+    padding:6px 12px; border-radius:100px; font-size:12px; font-weight:700; margin-top:10px;
+  }
+  .quiz-q-card{ padding:20px 18px; margin-top:16px; }
+  .quiz-q-card .qnum{ font-size:11px; font-weight:700; color:var(--primary); }
+  .quiz-q-card .qtext{ font-size:15px; font-weight:700; margin-top:8px; line-height:1.5; }
+  .opt{
+    display:flex; align-items:center; gap:10px; padding:13px 14px; border-radius:14px; margin-top:10px;
+    border:1.5px solid var(--line); background:var(--surface); font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .opt .k{
+    width:24px; height:24px; border-radius:50%; background:#f0f7f5; color:var(--ink-soft); font-size:11.5px;
+    display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;
+  }
+  .opt.correct{ border-color:var(--green); background:var(--green-light); }
+  .opt.correct .k{ background:var(--green); color:white; }
+  .opt.wrong{ border-color:var(--danger); background:var(--danger-light); }
+  .opt.wrong .k{ background:var(--danger); color:white; }
+  .quiz-feedback{ margin-top:14px; font-size:12.5px; font-weight:600; color:var(--ink-soft); text-align:center; }
+  .quiz-result{ text-align:center; padding:30px 16px 10px; }
+  .quiz-result .emoji{ font-size:46px; }
+  .quiz-result h3{ font-family:'Jua'; font-size:19px; margin:12px 0 6px; }
+  .quiz-result p{ font-size:12.5px; color:var(--ink-soft); }
+
+  /* ---- EXCHANGE screen ---- */
+  .points-hero{
+    background:linear-gradient(135deg, var(--primary) 0%, #0a4e60 100%);
+    border-radius:var(--radius-lg); padding:20px; color:white; margin-top:8px; position:relative; overflow:hidden;
+  }
+  .points-hero::after{
+    content:''; position:absolute; right:-30px; top:-30px; width:130px; height:130px; border-radius:50%;
+    background:rgba(255,255,255,0.08);
+  }
+  .points-hero .lbl{ font-size:12px; opacity:.85; font-weight:600; }
+  .points-hero .amt{ font-family:'IBM Plex Mono'; font-size:32px; font-weight:600; margin-top:6px; }
+  .points-hero .amt span{ font-size:15px; opacity:.8; margin-left:3px; }
+  .shop-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+  .shop-card{ padding:14px; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+  .shop-card .ic-wrap{
+    width:46px; height:46px; border-radius:14px; background:var(--bg-deep); display:flex; align-items:center; justify-content:center;
+  }
+  .shop-card .ic-wrap svg{ width:24px; height:24px; }
+  .shop-card .nm{ font-size:12.5px; font-weight:700; line-height:1.4; }
+  .shop-card .cost{ font-family:'IBM Plex Mono'; font-size:13.5px; font-weight:600; color:var(--primary-dark); }
+  .shop-card .btn{ width:100%; padding:8px; font-size:11.5px; margin-top:2px; }
+
+  /* ---- bottom nav ---- */
+  .bottomnav{
+    position:absolute; left:0; right:0; bottom:0; height:64px; background:rgba(255,255,255,0.92);
+    backdrop-filter:blur(10px); border-top:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-around; padding-bottom:0; z-index:40;
+  }
+  .navbtn{
+    display:flex; flex-direction:row; align-items:center; gap:6px; background:none; border:none; cursor:pointer;
+    color:var(--ink-faint); font-size:11.5px; font-weight:700; font-family:'Noto Sans KR'; padding:8px 10px;
+  }
+  .navbtn svg{ width:20px; height:20px; flex-shrink:0; }
+  .navbtn.active{ color:var(--primary); }
+  .navbtn .dot-ind{ width:4px; height:4px; border-radius:50%; background:var(--primary); opacity:0; }
+  .navbtn.active .dot-ind{ opacity:1; }
+
+  .toast{
+    position:absolute; left:50%; bottom:100px; transform:translate(-50%, 20px); z-index:80;
+    background:var(--ink); color:white; padding:11px 18px; border-radius:100px; font-size:12.5px; font-weight:600;
+    opacity:0; pointer-events:none; transition:all .3s ease; white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <symbol id="ic-mosquito" viewBox="0 0 32 32">
+    <ellipse cx="18" cy="17" rx="4.6" ry="7.2" transform="rotate(18 18 17)" fill="currentColor"/>
+    <circle cx="13.2" cy="9.5" r="2.6" fill="currentColor"/>
+    <path d="M11 8 L2 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+    <path d="M22 12 Q29 8 29 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    <path d="M20 15 Q29 15 30 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none" opacity=".85"/>
+    <path d="M20 21 Q26 26 24 30" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    <path d="M17 23 Q19 29 16 31" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    <ellipse cx="21" cy="15" rx="6.5" ry="3" transform="rotate(-25 21 15)" fill="currentColor" opacity=".35"/>
+  </symbol>
+  <symbol id="ic-tick" viewBox="0 0 32 32">
+    <ellipse cx="16" cy="17" rx="8.5" ry="9.5" fill="currentColor"/>
+    <circle cx="16" cy="8" r="2.2" fill="currentColor"/>
+    <path d="M9 12 L2 9 M9 15 L2 15 M9 19 L3 22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M23 12 L30 9 M23 15 L30 15 M23 19 L29 22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <ellipse cx="13.5" cy="14" rx="2" ry="2.4" fill="rgba(255,255,255,.35)"/>
+  </symbol>
+  <symbol id="ic-bee" viewBox="0 0 32 32">
+    <ellipse cx="16" cy="17" rx="7" ry="9" fill="currentColor"/>
+    <path d="M9.5 13.5h13M9.5 17h13M9.5 20.5h13" stroke="white" stroke-width="2"/>
+    <circle cx="16" cy="7" r="3" fill="currentColor"/>
+    <path d="M11 9 L4 5M21 9 L28 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+    <ellipse cx="9" cy="14" rx="5.5" ry="2.6" transform="rotate(-24 9 14)" fill="currentColor" opacity=".3"/>
+    <ellipse cx="23" cy="14" rx="5.5" ry="2.6" transform="rotate(24 23 14)" fill="currentColor" opacity=".3"/>
+  </symbol>
+  <symbol id="ic-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="ic-bug-generic" viewBox="0 0 32 32"><ellipse cx="16" cy="18" rx="7" ry="8.5" fill="currentColor"/><circle cx="16" cy="8" r="3" fill="currentColor"/><path d="M10 11l-6-4M22 11l6-4M9 18h-6M23 18h6M10 25l-6 4M22 25l6 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 11v14" stroke="white" stroke-width="1.6"/></symbol>
+  <symbol id="ic-home" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-map" viewBox="0 0 24 24"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="ic-report" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="ic-quiz" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.2c-.9.5-1.1.9-1.1 1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="12" cy="16.5" r="1" fill="currentColor"/></symbol>
+  <symbol id="ic-exchange" viewBox="0 0 24 24"><path d="M4 8h13M17 8l-3-3M17 8l-3 3M20 16H7M7 16l3-3M7 16l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9.5" r="2.3" fill="currentColor"/></symbol>
+  <symbol id="ic-therm" viewBox="0 0 24 24"><path d="M13 14.8V5a1 1 0 0 0-2 0v9.8a3 3 0 1 0 2 0z" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="ic-drop" viewBox="0 0 24 24"><path d="M12 3s6 7 6 11.5A6 6 0 0 1 6 14.5C6 10 12 3 12 3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="ic-bracelet" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="4.7" r="1.3" fill="currentColor"/><circle cx="19.3" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="19.3" r="1.3" fill="currentColor"/><circle cx="4.7" cy="12" r="1.3" fill="currentColor"/></symbol>
+  <symbol id="ic-patch" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="ic-spray" viewBox="0 0 24 24"><path d="M9 21h6M10 21v-9h4v9M9 12h6l-1-4h-4l-1 4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13 5V3M17 6l1.5-1.5M15 8h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="ic-card" viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10h17" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4.5-4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="ic-landmark" viewBox="0 0 24 24"><path d="M4 21h16M5 21V10M19 21V10M3 10l9-6 9 6M8 10v7M12 10v7M16 10v7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-icecream" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.6 9.2L12 20l3.4-10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-drink" viewBox="0 0 24 24"><path d="M6.2 8h11.6l-1.3 11.2a2 2 0 0 1-2 1.8H9.5a2 2 0 0 1-2-1.8L6.2 8z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.2 8V5.3M14.8 8V4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6.7 12.2h10.6" stroke="currentColor" stroke-width="1.3"/></symbol>
+  <symbol id="ic-fan" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.8" fill="currentColor"/><path d="M12 12c0-4.2 3-6.4 5.2-5.3 2 1 1.3 5-1.8 6M12 12c-4.2 0-6.4-3-5.3-5.2 1-2 5-1.3 6 1.8M12 12c0 4.2-3 6.4-5.2 5.3-2-1-1.3-5 1.8-6M12 12c4.2 0 6.4 3 5.3 5.2-1 2-5 1.3-6-1.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-sleeve" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7.3 9.2h9.4M7.3 15h9.4" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="ic-coupon" viewBox="0 0 24 24"><path d="M4 9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a1.6 1.6 0 0 0 0 3v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1a1.6 1.6 0 0 0 0-3V9z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13.5 7.5v9" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/></symbol>
+  <symbol id="ic-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="ic-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="ic-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 6H4a3 3 0 0 0 3 5M17 6h3a3 3 0 0 1-3 5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 14v3M9 20h6M9.5 17h5l.5 3h-6l.5-3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+</defs>
+</svg>
+
+<div class="app-shell">
+  <div class="screens">
+
+    <!-- ================= HOME ================= -->
+    <section class="screen active" id="screen-home">
+      <div class="app-title">
+        <div class="logo-badge"><svg viewBox="0 0 32 32" style="color:white;"><use href="#ic-mosquito"/></svg></div>
+        <h1>Bug Shield</h1>
+      </div>
+      <div class="location-row"><svg viewBox="0 0 24 24" style="color:var(--primary)"><use href="#ic-pin"/></svg> 현재 위치 · 한강공원 인근</div>
+
+      <div class="card radar-card">
+        <div class="radar-wrap">
+          <div class="radar-ring r1"></div>
+          <div class="radar-ring r2"></div>
+          <div class="radar-ring r3"></div>
+          <div class="radar-sweep"></div>
+          <div class="blip b1" style="color:var(--danger)" onclick="showBlipInfo(this,'mosquito','danger','한강공원 풀밭 구역','모기 다수 발견 · 약 120m')"><svg viewBox="0 0 32 32"><use href="#ic-mosquito"/></svg></div>
+          <div class="blip b2" style="color:var(--warn)" onclick="showBlipInfo(this,'tick','warn','탄천 산책로 인근 수풀','진드기 제보 접수 · 약 340m')"><svg viewBox="0 0 32 32"><use href="#ic-tick"/></svg></div>
+          <div class="blip b3" style="color:var(--danger)" onclick="showBlipInfo(this,'mosquito','danger','자전거도로 옆 배수로','고인 물 · 모기 유충 서식 추정 · 약 90m')"><svg viewBox="0 0 32 32"><use href="#ic-mosquito"/></svg></div>
+          <div class="radar-center">
+            <div class="emoji" id="radar-emoji">🟡</div>
+            <div class="lvl" id="radar-lvl">보통</div>
+          </div>
+        </div>
+        <div class="radar-caption">
+          <div class="big">주변 해충 레이더</div>
+          <div class="small">반경 500m 내 해충 활동을 실시간으로 감지하고 있어요 · 점을 눌러보세요</div>
+        </div>
+        <div class="radar-info" id="radar-info">
+          <div class="ic" id="radar-info-ic"></div>
+          <div class="txt">
+            <div class="t1" id="radar-info-title"></div>
+            <div class="t2" id="radar-info-desc"></div>
+          </div>
+          <span class="pill" id="radar-info-pill"></span>
+        </div>
+      </div>
+
+      <div class="weather-source-row">
+        <span id="weather-source-label">🧪 샘플 데이터 표시 중</span>
+        <button class="weather-settings-btn" onclick="openWeatherSettings()">기상청 API 연동 <svg viewBox="0 0 24 24"><use href="#ic-gear"/></svg></button>
+      </div>
+
+      <div class="row2">
+        <div class="card stat-card">
+          <div class="top"><svg viewBox="0 0 24 24"><use href="#ic-therm"/></svg>기온</div>
+          <div class="val" id="stat-temp">29°C</div>
+          <div class="sub" id="stat-temp-sub">체감 31°C · 맑음</div>
+        </div>
+        <div class="card stat-card">
+          <div class="top"><svg viewBox="0 0 24 24"><use href="#ic-drop"/></svg>습도</div>
+          <div class="val" id="stat-humid">78%</div>
+          <div class="sub pill warn" id="stat-risk-pill" style="margin-top:8px;">🟡 위험도 보통</div>
+        </div>
+      </div>
+
+      <div class="card idcheck-entry-card" onclick="openIdCheck()">
+        <div class="idcheck-entry-icon"><svg viewBox="0 0 24 24"><use href="#ic-camera"/></svg></div>
+        <div class="idcheck-entry-text">
+          <div class="idcheck-entry-title">📸 AI 해충 판별</div>
+          <div class="idcheck-entry-sub">사진을 찍으면 AI가 어떤 해충인지 분석해드려요</div>
+        </div>
+        <svg class="idcheck-entry-arrow" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+
+      <div class="section-label">최근 알림 <span class="more">전체보기</span></div>
+      <div class="card alert-item">
+        <div class="ic danger"><svg viewBox="0 0 32 32" style="color:var(--danger)"><use href="#ic-mosquito"/></svg></div>
+        <div class="txt">
+          <div class="t1">⚠️ 모기 위험 지역입니다</div>
+          <div class="t2">기피제를 사용하세요 · 한강공원 풀밭 구역</div>
+        </div>
+        <div class="time">3분 전</div>
+      </div>
+      <div class="card alert-item">
+        <div class="ic warn"><svg viewBox="0 0 32 32" style="color:#a06a00"><use href="#ic-tick"/></svg></div>
+        <div class="txt">
+          <div class="t1">🕷️ 진드기 주의!</div>
+          <div class="t2">긴 바지 착용을 권장합니다</div>
+        </div>
+        <div class="time">27분 전</div>
+      </div>
+
+      <div class="section-label">해충 뉴스</div>
+      <div class="news-scroll">
+        <div class="card news-card">
+          <div class="date">2026.08.11</div>
+          <div class="title">늦더위 속 모기 활동, 9월까지 이어진다</div>
+          <div class="summary">기온이 높은 밤 시간대에 야외 활동 시 기피제 사용을 권장합니다.</div>
+        </div>
+        <div class="card news-card">
+          <div class="date">2026.08.09</div>
+          <div class="title">풀숲 산책 후엔 몸 구석구석 확인하세요</div>
+          <div class="summary">진드기는 옷 위를 타고 이동하다가 피부 접힘 부위에 붙기 쉽습니다.</div>
+        </div>
+        <div class="card news-card">
+          <div class="date">2026.08.05</div>
+          <div class="title">고인 물부터 없애는 것이 첫걸음</div>
+          <div class="summary">화분 받침, 배수구의 고인 물을 정기적으로 비워주는 것이 효과적입니다.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= AI 해충 판별 ================= -->
+    <section class="screen" id="screen-idcheck">
+      <div class="app-title" style="margin-top:8px; gap:10px;">
+        <button class="back-btn" onclick="switchTab('home')">
+          <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <h1 style="font-size:19px;">AI 해충 판별</h1>
+      </div>
+      <div class="location-row">사진을 찍거나 올리면 AI가 어떤 해충인지 분석해드려요</div>
+
+      <div class="card idcheck-photo-box" id="idcheck-photo-box" onclick="document.getElementById('idcheck-file-input').click()">
+        <div id="idcheck-placeholder">
+          <svg viewBox="0 0 24 24" class="idcheck-placeholder-icon"><use href="#ic-camera"/></svg>
+          <div class="idcheck-placeholder-text">눌러서 사진을 촬영하거나 선택해주세요</div>
+        </div>
+        <img id="idcheck-preview-img" style="display:none;">
+      </div>
+      <input type="file" id="idcheck-file-input" accept="image/*" capture="environment" style="display:none" onchange="handleIdcheckFile(event)">
+
+      <button class="btn primary block" id="idcheck-analyze-btn" style="margin-top:14px; display:none;" onclick="analyzeCurrentPhoto()">🔍 AI로 분석하기</button>
+      <button class="btn ghost block" id="idcheck-retake-btn" style="margin-top:10px; display:none;" onclick="resetIdCheck()">다시 촬영하기</button>
+
+      <div id="idcheck-result"></div>
+    </section>
+
+    <!-- ================= MAP ================= -->
+    <section class="screen" id="screen-map">
+      <div class="app-title" style="margin-top:8px;">
+        <h1 style="font-size:19px;">실시간 해충 예보 지도</h1>
+      </div>
+      <div class="location-row" id="map-location-row"><svg viewBox="0 0 24 24" style="color:var(--primary)"><use href="#ic-pin"/></svg> <span id="map-location-text">경상북도 경산시 주요 지역</span></div>
+
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" style="color:var(--ink-faint)"><use href="#ic-search"/></svg>
+        <input id="tourist-search" type="text" placeholder="현재 있는 관광지 검색 (예: 경복궁, 해운대)" oninput="renderTouristResults(this.value)">
+      </div>
+      <div class="filter-chip-row" id="tourist-filters"></div>
+      <div id="tourist-results"></div>
+
+      <div class="map-real-wrap">
+        <div id="real-map"></div>
+        <button class="locate-btn" onclick="focusRegionalArea()" title="경산 지역 전체보기">
+          <svg viewBox="0 0 24 24"><use href="#ic-locate"/></svg>
+        </button>
+      </div>
+      <div class="map-legend">
+        <div class="li"><span class="dot" style="background:var(--danger)"></span>매우 위험</div>
+        <div class="li"><span class="dot" style="background:var(--warn)"></span>주의</div>
+        <div class="li"><span class="dot" style="background:var(--green)"></span>안전</div>
+      </div>
+
+      <div class="section-label">지역별 해충 위험 정보</div>
+      <div id="regional-risk-list"></div>
+    </section>
+
+    <!-- ================= REPORT ================= -->
+    <section class="screen" id="screen-report">
+      <div class="app-title" style="margin-top:8px;"><h1 style="font-size:19px;">사용자 제보 게시판</h1></div>
+      <div class="location-row" style="margin-bottom:16px;">해충이 많은 장소를 직접 알려주세요</div>
+      <div id="report-list"></div>
+      <button class="fab" onclick="openReportForm()"><svg viewBox="0 0 24 24"><use href="#ic-plus"/></svg></button>
+    </section>
+
+    <!-- ================= QUIZ ================= -->
+    <section class="screen" id="screen-quiz">
+      <div id="quiz-select-view">
+        <div class="app-title" style="margin-top:8px;"><h1 style="font-size:19px;">해충 퀴즈</h1></div>
+        <div class="location-row">난이도를 선택하고 포인트를 모아보세요</div>
+        <div class="quiz-points-chip"><svg viewBox="0 0 24 24" width="14" height="14"><use href="#ic-trophy"/></svg> 보유 포인트 <span id="quiz-pt-label" class="mono"></span>P</div>
+
+        <div class="card diff-card" onclick="startQuiz('초급')">
+          <div class="badge" style="background:var(--green);">초급</div>
+          <div class="info"><div class="t">초급 · 기초 상식</div><div class="d">문제당 10P · 3문제</div></div>
+          <svg class="arrow" viewBox="0 0 24 24" width="18" height="18"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="card diff-card" onclick="startQuiz('중급')">
+          <div class="badge" style="background:var(--warn);">중급</div>
+          <div class="info"><div class="t">중급 · 대처 방법</div><div class="d">문제당 20P · 3문제</div></div>
+          <svg class="arrow" viewBox="0 0 24 24" width="18" height="18"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="card diff-card" onclick="startQuiz('고급')">
+          <div class="badge" style="background:var(--danger);">고급</div>
+          <div class="info"><div class="t">고급 · 전문 지식</div><div class="d">문제당 30P · 3문제</div></div>
+          <svg class="arrow" viewBox="0 0 24 24" width="18" height="18"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+      <div id="quiz-play-view" style="display:none;">
+        <div class="app-title" style="margin-top:8px;"><h1 style="font-size:19px;" id="quiz-level-title">퀴즈</h1></div>
+        <div class="quiz-progress" id="quiz-progress"></div>
+        <div id="quiz-question-area"></div>
+      </div>
+
+      <div id="quiz-result-view" style="display:none;">
+        <div class="card quiz-result">
+          <div class="emoji">🏆</div>
+          <h3>퀴즈 완료!</h3>
+          <p id="quiz-result-text">3문제 중 3문제 정답 · +30P 획득</p>
+          <button class="btn primary block" style="margin-top:18px;" onclick="backToQuizSelect()">다른 난이도 도전하기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= EXCHANGE ================= -->
+    <section class="screen" id="screen-exchange">
+      <div class="app-title" style="margin-top:8px;"><h1 style="font-size:19px;">포인트 교환소</h1></div>
+      <div class="points-hero">
+        <div class="lbl">보유 포인트</div>
+        <div class="amt"><span id="exchange-pt-label">850</span><span>P</span></div>
+      </div>
+
+      <div class="section-label">해충 예방용품</div>
+      <div class="shop-grid" id="shop-grid"></div>
+
+      <div class="section-label">여름 특별 상품 · 편의점 교환권</div>
+      <div class="shop-grid" id="shop-grid-summer"></div>
+    </section>
+
+  </div>
+
+  <div class="toast" id="toast">알림</div>
+
+  <div class="form-overlay" id="form-overlay">
+    <div class="form-sheet">
+      <h3>해충 제보하기</h3>
+      <div class="field"><label>제목</label><input id="f-title" type="text" placeholder="예: 한강공원에 진드기가 많아요"></div>
+      <div class="field"><label>위치</label><input id="f-loc" type="text" placeholder="예: 한강공원 풀밭 구역"></div>
+      <div class="field"><label>내용</label><textarea id="f-body" placeholder="상세한 상황을 알려주세요"></textarea></div>
+      <div class="form-actions">
+        <button class="btn ghost block" onclick="closeReportForm()">취소</button>
+        <button class="btn primary block" onclick="submitReport()">제보하기</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-overlay" id="weather-form-overlay">
+    <div class="form-sheet">
+      <h3>기상청 실시간 날씨 연동</h3>
+      <p class="weather-help-text">
+        공공데이터포털에서 발급받은 <b>기상청 단기예보 조회서비스</b> 인증키(서비스키)를 입력하면
+        실시간 기온·습도로 위험도를 계산해요. 격자 좌표(nx, ny)는 기본값이 서울시청 기준(60, 127)이에요.
+      </p>
+      <div class="field"><label>서비스키 (인증키)</label><input id="w-key" type="text" placeholder="공공데이터포털에서 발급받은 인증키 붙여넣기"></div>
+      <div class="field"><label>격자 X (nx)</label><input id="w-nx" type="text" placeholder="60" value="60"></div>
+      <div class="field"><label>격자 Y (ny)</label><input id="w-ny" type="text" placeholder="127" value="127"></div>
+      <div class="form-actions">
+        <button class="btn ghost block" onclick="closeWeatherSettings()">취소</button>
+        <button class="btn primary block" onclick="applyWeatherSettings()">연동하기</button>
+      </div>
+    </div>
+  </div>
+
+
+    <button class="navbtn active" data-tab="home" onclick="switchTab('home')">
+      <svg viewBox="0 0 24 24"><use href="#ic-home"/></svg>홈<div class="dot-ind"></div>
+    </button>
+    <button class="navbtn" data-tab="map" onclick="switchTab('map')">
+      <svg viewBox="0 0 24 24"><use href="#ic-map"/></svg>지도<div class="dot-ind"></div>
+    </button>
+    <button class="navbtn" data-tab="report" onclick="switchTab('report')">
+      <svg viewBox="0 0 24 24"><use href="#ic-report"/></svg>제보<div class="dot-ind"></div>
+    </button>
+    <button class="navbtn" data-tab="quiz" onclick="switchTab('quiz')">
+      <svg viewBox="0 0 24 24"><use href="#ic-quiz"/></svg>퀴즈<div class="dot-ind"></div>
+    </button>
+    <button class="navbtn" data-tab="exchange" onclick="switchTab('exchange')">
+      <svg viewBox="0 0 24 24"><use href="#ic-exchange"/></svg>교환소<div class="dot-ind"></div>
+    </button>
+  </div>
+</div>
+
+<script>
+/* ---------------- state ---------------- */
+let points = 850;
+
+let weatherConfig = { serviceKey:'', nx:60, ny:127 };
+
+/* ---------------- weather settings overlay ---------------- */
+function openWeatherSettings(){
+  document.getElementById('w-key').value = weatherConfig.serviceKey;
+  document.getElementById('w-nx').value = weatherConfig.nx;
+  document.getElementById('w-ny').value = weatherConfig.ny;
+  document.getElementById('weather-form-overlay').classList.add('open');
+}
+function closeWeatherSettings(){
+  document.getElementById('weather-form-overlay').classList.remove('open');
+}
+function applyWeatherSettings(){
+  const key = document.getElementById('w-key').value.trim();
+  const nx = document.getElementById('w-nx').value.trim() || '60';
+  const ny = document.getElementById('w-ny').value.trim() || '127';
+  if(!key){ showToast('인증키를 입력해주세요'); return; }
+  weatherConfig = { serviceKey:key, nx, ny };
+  closeWeatherSettings();
+  fetchRealWeather();
+}
+
+/* ---------------- KMA 기상청 초단기실황(getUltraSrtNcst) 연동 ---------------- */
+function getKmaBaseDateTime(){
+  const now = new Date();
+  let hh = now.getHours();
+  const mm = now.getMinutes();
+  // 관측자료는 매시 40분에 생성되므로, 그 전이면 이전 시각 자료를 요청한다
+  if(mm < 40) hh -= 1;
+  const d = new Date(now);
+  if(hh < 0){ hh = 23; d.setDate(d.getDate() - 1); }
+  const base_date = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  const base_time = `${String(hh).padStart(2,'0')}00`;
+  return { base_date, base_time };
+}
+
+function computeRiskFromWeather(tempC, humidity){
+  // 기온·습도를 기반으로 한 단순 위험도 추정 로직 (모기는 고온다습할수록 활발)
+  if(tempC >= 27 && humidity >= 70) return 'danger';
+  if(tempC >= 22 && humidity >= 55) return 'warn';
+  return 'safe';
+}
+
+function updateWeatherUI(tempC, humidity, sourceLabel){
+  document.getElementById('stat-temp').textContent = `${tempC}°C`;
+  document.getElementById('stat-temp-sub').textContent = `습도 ${humidity}% 기준 자동 계산`;
+  document.getElementById('stat-humid').textContent = `${humidity}%`;
+
+  const risk = computeRiskFromWeather(tempC, humidity);
+  const rm = riskMetaHome[risk];
+  const pill = document.getElementById('stat-risk-pill');
+  pill.className = `sub pill ${risk === 'safe' ? 'green' : risk === 'warn' ? 'warn' : 'danger'}`;
+  pill.textContent = `${rm.emoji} 위험도 ${rm.label}`;
+  document.getElementById('radar-emoji').textContent = rm.emoji;
+  document.getElementById('radar-lvl').textContent = rm.label;
+
+  document.getElementById('weather-source-label').textContent = sourceLabel;
+}
+const riskMetaHome = {
+  safe:   { label:'낮음', emoji:'🟢' },
+  warn:   { label:'보통', emoji:'🟡' },
+  danger: { label:'높음', emoji:'🔴' },
+};
+
+async function fetchRealWeather(){
+  if(!weatherConfig.serviceKey){
+    showToast('먼저 기상청 API 인증키를 등록해주세요');
+    openWeatherSettings();
+    return;
+  }
+  document.getElementById('weather-source-label').textContent = '⏳ 기상청 데이터 불러오는 중...';
+  const { base_date, base_time } = getKmaBaseDateTime();
+  const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst`
+    + `?serviceKey=${encodeURIComponent(weatherConfig.serviceKey)}`
+    + `&pageNo=1&numOfRows=10&dataType=JSON`
+    + `&base_date=${base_date}&base_time=${base_time}`
+    + `&nx=${encodeURIComponent(weatherConfig.nx)}&ny=${encodeURIComponent(weatherConfig.ny)}`;
+
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const header = data?.response?.header;
+    if(!header || header.resultCode !== '00'){
+      throw new Error(header?.resultMsg || '응답 오류');
+    }
+    const items = data.response.body.items.item;
+    const get = (cat) => items.find(i => i.category === cat)?.obsrValue;
+    const tempC = Number(get('T1H'));
+    const humidity = Number(get('REH'));
+    if(Number.isNaN(tempC) || Number.isNaN(humidity)) throw new Error('데이터 파싱 실패');
+
+    updateWeatherUI(tempC, humidity, `📡 기상청 실시간 데이터 (${base_date} ${base_time.slice(0,2)}시 관측)`);
+    showToast('기상청 실시간 날씨를 불러왔어요');
+  } catch(err){
+    console.error(err);
+    document.getElementById('weather-source-label').textContent = '⚠️ 연동 실패 · 샘플 데이터 표시 중';
+    showToast('날씨 API 호출 실패 (인증키·CORS 확인 필요)');
+  }
+}
+
+/* ---------------- AI 해충 판별 (Anthropic API 이미지 분석) ---------------- */
+function openIdCheck(){
+  switchTab('idcheck');
+}
+
+let idcheckCurrentFile = null;
+const idcheckIconMap = { "모기":"ic-mosquito", "진드기":"ic-tick", "벌":"ic-bee" };
+
+function handleIdcheckFile(event){
+  const file = event.target.files && event.target.files[0];
+  if(!file) return;
+  idcheckCurrentFile = file;
+  const url = URL.createObjectURL(file);
+  const img = document.getElementById('idcheck-preview-img');
+  img.src = url;
+  img.style.display = 'block';
+  document.getElementById('idcheck-placeholder').style.display = 'none';
+  document.getElementById('idcheck-analyze-btn').style.display = 'flex';
+  document.getElementById('idcheck-retake-btn').style.display = 'flex';
+  document.getElementById('idcheck-result').innerHTML = '';
+}
+
+function resetIdCheck(){
+  idcheckCurrentFile = null;
+  document.getElementById('idcheck-file-input').value = '';
+  document.getElementById('idcheck-preview-img').style.display = 'none';
+  document.getElementById('idcheck-placeholder').style.display = 'flex';
+  document.getElementById('idcheck-analyze-btn').style.display = 'none';
+  document.getElementById('idcheck-retake-btn').style.display = 'none';
+  document.getElementById('idcheck-result').innerHTML = '';
+}
+
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function analyzeCurrentPhoto(){
+  if(!idcheckCurrentFile){ showToast('먼저 사진을 선택해주세요'); return; }
+  const resultWrap = document.getElementById('idcheck-result');
+  const analyzeBtn = document.getElementById('idcheck-analyze-btn');
+  analyzeBtn.disabled = true;
+  resultWrap.innerHTML = `<div class="idcheck-loading"><div class="idcheck-spinner"></div>AI가 사진을 분석하는 중이에요...</div>`;
+
+  try{
+    const base64 = await fileToBase64(idcheckCurrentFile);
+    const mediaType = idcheckCurrentFile.type || 'image/jpeg';
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 800,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text:
+`사진 속에 모기, 진드기, 벌 중 어떤 해충(또는 곤충)이 있는지 분석해줘.
+반드시 아래 JSON 형식으로만 답변하고, 다른 설명이나 코드블록 표시는 절대 포함하지 마.
+{
+  "is_pest_photo": true 또는 false,
+  "pest_name": "모기" 또는 "진드기" 또는 "벌" 또는 "기타 곤충" 또는 "알 수 없음" 중 하나,
+  "confidence": 0에서 100 사이의 정수,
+  "characteristics": ["특징을 짧은 문장으로 2~3개"],
+  "precautions": ["주의사항을 짧은 문장으로 2~3개"]
+}` }
+          ]
+        }]
+      })
+    });
+
+    if(!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+    renderIdcheckResult(result);
+  } catch(err){
+    console.error(err);
+    resultWrap.innerHTML = `<div class="idcheck-notfound">분석에 실패했어요. 잠시 후 다시 시도해주세요.</div>`;
+    showToast('AI 분석에 실패했어요');
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+function renderIdcheckResult(result){
+  const resultWrap = document.getElementById('idcheck-result');
+  if(!result.is_pest_photo){
+    resultWrap.innerHTML = `<div class="idcheck-notfound">🔍 사진에서 해충을 뚜렷하게 찾지 못했어요.<br>더 가까이서, 밝은 곳에서 다시 찍어보세요.</div>`;
+    return;
+  }
+  const iconId = idcheckIconMap[result.pest_name] || 'ic-bug-generic';
+  const characteristics = Array.isArray(result.characteristics) ? result.characteristics : [];
+  const precautions = Array.isArray(result.precautions) ? result.precautions : [];
+  const confidence = Math.max(0, Math.min(100, Number(result.confidence) || 0));
+
+  resultWrap.innerHTML = `
+    <div class="card idcheck-result-card">
+      <div class="idcheck-result-head">
+        <div class="idcheck-result-icon" style="background:var(--primary-light); color:var(--primary-dark);">
+          <svg viewBox="0 0 32 32"><use href="#${iconId}"/></svg>
+        </div>
+        <div>
+          <div class="idcheck-result-name">${escapeHtml(result.pest_name)}일 가능성이 높아요</div>
+          <div class="idcheck-result-conf">정확도 약 ${confidence}%</div>
+        </div>
+      </div>
+      <div class="idcheck-conf-bar"><div class="idcheck-conf-fill" style="width:${confidence}%"></div></div>
+      ${characteristics.length ? `<div class="idcheck-section-title">특징</div><ul>${characteristics.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>` : ''}
+      ${precautions.length ? `<div class="idcheck-section-title">주의사항</div><ul>${precautions.map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
+      <div class="idcheck-disclaimer">⚠️ AI 분석 결과는 참고용이에요. 정확한 판별이 필요하면 전문가에게 문의해주세요.</div>
+    </div>
+  `;
+  showToast('분석이 완료됐어요');
+}
+
+let reports = [
+  { title:"한강공원에 진드기가 많아요", loc:"한강공원 풀밭 구역", body:"풀밭 쪽에 진드기가 많으니 위험 지역에 추가해주세요. 반바지 착용 시 주의가 필요합니다.", date:"2026.08.10", status:"확인됨" },
+  { title:"탄천 산책로 모기떼 주의", loc:"탄천 산책로", body:"해질녘에 모기가 급격히 늘어납니다. 저녁 산책 시 긴 옷을 추천드려요.", date:"2026.08.11", status:"검토중" },
+  { title:"어린이공원은 비교적 안전해요", loc:"동네 어린이공원", body:"잔디 관리가 잘 되어 있어서 그런지 최근엔 벌레를 거의 못 봤어요.", date:"2026.08.08", status:"확인됨" },
+];
+
+const shopItems = [
+  { id:"bracelet", name:"모기 팔찌", cost:300, icon:"ic-bracelet", cat:"prevention" },
+  { id:"patch", name:"벌레 물림 패치", cost:200, icon:"ic-patch", cat:"prevention" },
+  { id:"spray", name:"모기 기피제", cost:500, icon:"ic-spray", cat:"prevention" },
+  { id:"card", name:"진드기 제거 카드", cost:700, icon:"ic-card", cat:"prevention" },
+  { id:"icecream", name:"편의점 아이스크림 교환권", cost:250, icon:"ic-icecream", cat:"summer" },
+  { id:"drink", name:"편의점 시원한 음료 교환권", cost:300, icon:"ic-drink", cat:"summer" },
+  { id:"fan", name:"휴대용 미니 선풍기", cost:900, icon:"ic-fan", cat:"summer" },
+  { id:"sleeve", name:"냉감 쿨토시", cost:350, icon:"ic-sleeve", cat:"summer" },
+];
+
+const quizBank = {
+  "초급": { color:"var(--green)", pt:10, per:3, qs:[
+    { q:"모기는 주로 언제 활동이 가장 활발할까요?", opts:["새벽과 해질녘","한낮 뙤약볕 아래","한밤중에만","실내에서만"], a:0 },
+    { q:"진드기가 주로 서식하는 곳은 어디일까요?", opts:["실내 마룻바닥","풀숲과 수풀","유리창 틈","냉장고 안"], a:1 },
+    { q:"모기 물림을 예방하는 방법으로 알맞은 것은?", opts:["밝은 색 긴 옷 착용","향수 많이 뿌리기","단 음식 많이 먹기","맨살 최대한 노출"], a:0 },
+    { q:"여름철 집 안으로 모기가 들어오는 것을 막는 방법은?", opts:["방충망 사용하기","창문 활짝 열어두기","불을 계속 켜두기","물을 받아두기"], a:0 },
+    { q:"벌레 물린 곳을 심하게 긁으면 생길 수 있는 문제는?", opts:["염증이나 2차 감염","저절로 예방됨","털이 자람","아무 문제 없음"], a:0 },
+    { q:"여름철 야외활동 시 벌레를 덜 유인하는 옷 색깔은?", opts:["밝은 색","진한 검정색","어두운 남색","무관하다"], a:0 },
+    { q:"모기가 알을 낳고 잘 번식하는 장소는?", opts:["고인 물","마른 모래","그늘진 콘크리트","선풍기 바람이 부는 곳"], a:0 },
+    { q:"여름철 에어컨을 사용할 때 함께 신경 써야 하는 것은?", opts:["필터에 세균·먼지 서식 가능","전혀 신경 쓸 필요 없음","냉방은 벌레와 무관함","필터 청소는 겨울에만"], a:0 },
+  ]},
+  "중급": { color:"var(--warn)", pt:20, per:3, qs:[
+    { q:"진드기에 물렸을 때 올바른 대처법은?", opts:["손으로 눌러서 터뜨린다","핀셋으로 몸통 전체를 잡고 천천히 제거한다","그냥 두고 지켜본다","뜨거운 물로 지진다"], a:1 },
+    { q:"이산화탄소 배출이 많은 사람은 모기에 물릴 확률이 어떻게 될까요?", opts:["더 높아진다","더 낮아진다","전혀 무관하다","오히려 물리지 않는다"], a:0 },
+    { q:"진드기가 옮길 수 있는 것으로 알려진 감염병은?", opts:["중증열성혈소판감소증후군(SFTS)","독감","수두","식중독"], a:0 },
+    { q:"여름철 식중독 예방을 위해 음식에 벌레(파리)가 닿지 않게 하는 방법은?", opts:["음식물 밀폐 보관하기","음식을 그대로 꺼내두기","창문을 계속 열어두기","음식 냄새를 강하게 하기"], a:0 },
+    { q:"벌에 쏘였을 때 침이 남아있다면 올바른 응급처치는?", opts:["카드 같은 것으로 밀어서 제거한다","손가락으로 눌러 짜낸다","그냥 둔다","뜨거운 찜질만 한다"], a:0 },
+    { q:"여름철 캠핑장에서 해충을 줄이는 방법으로 알맞은 것은?", opts:["모기장이 있는 텐트를 사용한다","불빛을 최대한 밝게 켜둔다","단 음료를 주변에 놓아둔다","풀밭에 그대로 눕는다"], a:0 },
+    { q:"말벌집을 발견했을 때 올바른 행동요령은?", opts:["건드리지 않고 거리를 둔 뒤 신고한다","막대로 찔러본다","물을 뿌려 없앤다","불로 태운다"], a:0 },
+    { q:"여름철 냇가나 계곡에서 특히 조심해야 할 벌레는?", opts:["등에·모기 같은 흡혈 곤충","무당벌레","나비","매미"], a:0 },
+  ]},
+  "고급": { color:"var(--danger)", pt:30, per:3, qs:[
+    { q:"모기 기피제의 대표적인 유효성분은 무엇일까요?", opts:["디트(DEET)","비타민C","소금","베이킹소다"], a:0 },
+    { q:"SFTS(중증열성혈소판감소증후군)의 주요 매개체는?", opts:["작은소참진드기","모기","파리","벌"], a:0 },
+    { q:"모기의 유충인 장구벌레가 주로 서식하는 환경은?", opts:["고인 물","마른 흙","나무껍질 속","돌 틈 바람"], a:0 },
+    { q:"일본뇌염을 매개하는 대표적인 모기 종은?", opts:["작은빨간집모기","흰줄숲모기","초파리","집파리"], a:0 },
+    { q:"진드기 매개 감염병 중 라임병을 일으키는 원인균은?", opts:["보렐리아균","대장균","포도상구균","살모넬라균"], a:0 },
+    { q:"여름철 모기 개체 수가 급증하는 주된 기후 조건은?", opts:["고온다습한 날씨","저온건조한 날씨","강한 바람이 부는 날씨","낮은 습도"], a:0 },
+    { q:"벌에 쏘인 뒤 아나필락시스 반응이 나타나면 취해야 할 조치는?", opts:["즉시 119에 신고하고 응급처치를 한다","안정을 취하며 집에서 쉰다","찬물로 세안만 한다","특별한 조치가 필요 없다"], a:0 },
+    { q:"기피제(DEET) 사용 시 주의해야 할 점은?", opts:["어린이는 저농도 제품을 사용한다","농도가 높을수록 무조건 좋다","눈 주위에 직접 발라도 된다","매 시간마다 계속 덧발라야 한다"], a:0 },
+  ]},
+};
+
+let quizState = { level:null, idx:0, correct:0, answered:false };
+
+/* ---------------- radar blip info ---------------- */
+function showBlipInfo(el, type, risk, name, desc){
+  document.querySelectorAll('.blip').forEach(b => b.classList.remove('picked'));
+  el.classList.add('picked');
+
+  const rm = riskMeta[risk];
+  const iconId = type === 'tick' ? 'ic-tick' : 'ic-mosquito';
+  const panel = document.getElementById('radar-info');
+  document.getElementById('radar-info-ic').style.background = rm.light;
+  document.getElementById('radar-info-ic').innerHTML = `<svg viewBox="0 0 32 32" style="color:${rm.text}"><use href="#${iconId}"/></svg>`;
+  document.getElementById('radar-info-title').textContent = name;
+  document.getElementById('radar-info-desc').textContent = desc;
+  const pill = document.getElementById('radar-info-pill');
+  pill.textContent = rm.label;
+  pill.style.background = rm.light;
+  pill.style.color = rm.text;
+  panel.classList.add('show');
+}
+
+/* ---------------- tourist attractions ---------------- */
+const touristSpots = [
+  { name:"경복궁",           cat:"고궁 · 문화유산",     type:"문화유산",      risk:"safe",   lat:37.5796, lng:126.9770 },
+  { name:"경주 불국사",       cat:"사찰 · 문화유산",     type:"문화유산",      risk:"safe",   lat:35.7898, lng:129.3320 },
+  { name:"남산서울타워",      cat:"전망대",              type:"도심명소",      risk:"safe",   lat:37.5512, lng:126.9882 },
+  { name:"롯데월드타워",      cat:"전망대 · 쇼핑몰",     type:"도심명소",      risk:"safe",   lat:37.5125, lng:127.1025 },
+  { name:"북촌한옥마을",      cat:"전통마을",            type:"전통거리",      risk:"warn",   lat:37.5826, lng:126.9831 },
+  { name:"인사동",           cat:"전통거리 · 쇼핑",     type:"전통거리",      risk:"safe",   lat:37.5740, lng:126.9857 },
+  { name:"명동거리",         cat:"쇼핑거리",            type:"전통거리",      risk:"safe",   lat:37.5636, lng:126.9834 },
+  { name:"한강공원 반포지구", cat:"공원 · 수변",         type:"공원·수변",     risk:"danger", lat:37.5100, lng:126.9970 },
+  { name:"여의도한강공원",    cat:"공원 · 수변",         type:"공원·수변",     risk:"warn",   lat:37.5285, lng:126.9330 },
+  { name:"청계천",           cat:"하천 산책로",         type:"공원·수변",     risk:"warn",   lat:37.5696, lng:126.9784 },
+  { name:"서울숲",           cat:"공원 · 숲",           type:"공원·수변",     risk:"danger", lat:37.5443, lng:127.0374 },
+  { name:"해운대해수욕장",    cat:"해변 · 부산",         type:"해변",          risk:"warn",   lat:35.1587, lng:129.1604 },
+  { name:"광안리해수욕장",    cat:"해변 · 부산",         type:"해변",          risk:"warn",   lat:35.1533, lng:129.1186 },
+  { name:"제주 협재해수욕장", cat:"해변 · 제주",         type:"해변",          risk:"warn",   lat:33.3941, lng:126.2397 },
+  { name:"설악산 국립공원",   cat:"산 · 등산로",         type:"산·계곡",       risk:"danger", lat:38.1670, lng:128.4656 },
+  { name:"지리산 국립공원",   cat:"산 · 등산로",         type:"산·계곡",       risk:"danger", lat:35.2010, lng:127.5620 },
+  { name:"오대산 국립공원",   cat:"숲길 · 등산로",       type:"산·계곡",       risk:"danger", lat:37.7930, lng:128.5960 },
+  { name:"가평 계곡 물놀이터", cat:"계곡 · 물놀이",       type:"산·계곡",       risk:"danger", lat:37.8300, lng:127.5100 },
+  { name:"에버랜드",         cat:"놀이공원",            type:"놀이공원",      risk:"safe",   lat:37.2946, lng:127.2020 },
+  { name:"캐리비안베이",     cat:"워터파크",            type:"놀이공원",      risk:"warn",   lat:37.2985, lng:127.2036 },
+  { name:"롯데월드 어드벤처", cat:"실내 놀이공원",       type:"놀이공원",      risk:"safe",   lat:37.5111, lng:127.0980 },
+  { name:"남이섬",           cat:"섬 · 관광지",         type:"섬",            risk:"warn",   lat:37.7904, lng:127.5262 },
+  { name:"순천만 습지",       cat:"습지 · 생태공원",     type:"습지·자연",     risk:"danger", lat:34.8807, lng:127.5010 },
+  { name:"우포늪",           cat:"습지 · 자연생태",     type:"습지·자연",     risk:"danger", lat:35.5480, lng:128.4230 },
+  { name:"담양 죽녹원",       cat:"대나무숲",            type:"습지·자연",     risk:"danger", lat:35.3186, lng:126.9877 },
+  { name:"보성 녹차밭",       cat:"다원 · 산책로",       type:"습지·자연",     risk:"warn",   lat:34.7710, lng:127.2350 },
+];
+
+/* ---- 실제 제보/뉴스 기반 지역 해충 위험 정보 ---- */
+const regionalRiskSpots = [
+  // 경산시 (사용자 제보 기반)
+  { name:"성암산",       region:"경산시", cat:"진드기 위험 · 등산로",  type:"지역 위험정보", risk:"danger", pest:"tick",     desc:"긴 풀과 등산로 주변에서 진드기 노출 가능성이 높은 지역.", lat:35.8231, lng:128.7361 },
+  { name:"남천강 산책로", region:"경산시", cat:"모기 주의 · 하천",      type:"지역 위험정보", risk:"warn",   pest:"mosquito", desc:"하천과 습지 주변이라 여름철 모기 발생이 많은 편.",        lat:35.8253, lng:128.7415 },
+  { name:"삼성현공원",   region:"경산시", cat:"벌·진드기 주의 · 공원",  type:"지역 위험정보", risk:"warn",   pest:"bee",       desc:"나무와 잔디가 많은 공원으로 야외 활동 시 주의.",          lat:35.7958, lng:128.8081 },
+  { name:"반곡지",       region:"경산시", cat:"모기 위험 · 저수지",    type:"지역 위험정보", risk:"danger", pest:"mosquito", desc:"저수지 주변의 고인 물 때문에 모기 서식 환경이 형성됨.",   lat:35.7823, lng:128.8423 },
+  { name:"갓바위 등산로", region:"경산시", cat:"벌·진드기 위험 · 산림", type:"지역 위험정보", risk:"danger", pest:"bee",       desc:"산림 지역이라 벌과 진드기를 특히 조심해야 함.",           lat:35.9784, lng:128.6949 },
+
+  // 대구광역시 (공개 뉴스·보건당국 발표 기반)
+  { name:"신천 둔치",     region:"대구광역시", cat:"모기 위험 · 하천",     type:"지역 위험정보", risk:"danger", pest:"mosquito", desc:"여름철 산책로 일대에 모기·하루살이가 크게 늘어 구청이 집중 방역을 실시하는 지역.", lat:35.8650, lng:128.6050 },
+  { name:"동촌유원지",   region:"대구광역시", cat:"모기 위험 · 강변 유원지", type:"지역 위험정보", risk:"danger", pest:"mosquito", desc:"금호강과 맞닿은 유원지로 여름철 모기떼가 심해 방역 인력이 추가 투입되는 지역.", lat:35.8886, lng:128.6742 },
+  { name:"금호강변",     region:"대구광역시", cat:"모기 주의 · 하천",     type:"지역 위험정보", risk:"warn",   pest:"mosquito", desc:"강변 저지대라 장마 이후 고인 물이 생기며 모기 서식지가 늘어나는 곳.", lat:35.8780, lng:128.6600 },
+  { name:"수성못",       region:"대구광역시", cat:"모기 주의 · 저수지",   type:"지역 위험정보", risk:"warn",   pest:"mosquito", desc:"도심 저수지 주변으로 여름철 모기 서식 환경이 조성되는 명소.", lat:35.8281, lng:128.6289 },
+  { name:"팔공산 동화사 일원", region:"대구광역시", cat:"벌·진드기 위험 · 산림", type:"지역 위험정보", risk:"danger", pest:"bee", desc:"울창한 산림과 등산로가 많아 벌과 진드기 노출 위험이 높은 지역. 일본뇌염 매개모기도 인근에서 확인된 바 있음.", lat:35.9309, lng:128.6857 },
+  { name:"앞산",         region:"대구광역시", cat:"진드기 주의 · 산림",   type:"지역 위험정보", risk:"warn",   pest:"tick",     desc:"숲과 등산로가 많은 도심 근접 산으로 야외활동 시 진드기 주의가 필요한 진드기 주의 환경.", lat:35.8267, lng:128.5691 },
+  { name:"안심습지",     region:"대구광역시", cat:"모기 주의 · 습지",     type:"지역 위험정보", risk:"warn",   pest:"mosquito", desc:"습지 환경 특성상 여름철 모기 서식에 취약한 모기 주의 환경.", lat:35.8938, lng:128.7075 },
+  { name:"달성습지",     region:"대구광역시", cat:"모기 주의 · 습지",     type:"지역 위험정보", risk:"warn",   pest:"mosquito", desc:"낙동강과 맞닿은 습지 지역으로 물이 고이기 쉬워 모기 주의가 필요한 환경.", lat:35.7908, lng:128.4653 },
+  { name:"비슬산",       region:"대구광역시", cat:"진드기 주의 · 산림",   type:"지역 위험정보", risk:"warn",   pest:"tick",     desc:"등산로와 수풀이 우거진 산악 지역으로 진드기 주의가 필요한 환경.", lat:35.6852, lng:128.5340 },
+  { name:"대구수목원",   region:"대구광역시", cat:"진드기·벌 주의 · 수목원", type:"지역 위험정보", risk:"warn",   pest:"bee",     desc:"다양한 수목과 화단이 조성된 공간으로 진드기·벌 모두 주의가 필요한 환경.", lat:35.8100, lng:128.5192 },
+  { name:"송해공원",     region:"대구광역시", cat:"수변·공원 주의 · 공원", type:"지역 위험정보", risk:"warn",   pest:"mosquito", desc:"하천과 인접한 수변·공원 환경으로 해충 서식 가능성에 주의가 필요한 지역.", lat:35.9540, lng:128.6390 },
+];
+touristSpots.push(...regionalRiskSpots);
+const regionalRegions = Array.from(new Set(regionalRiskSpots.map(s => s.region)));
+const touristTypes = ["전체", ...Array.from(new Set(touristSpots.map(s => s.type)))];
+let activeSpotType = "전체";
+const riskMeta = {
+  safe:   { label:"안전",     color:"var(--green)",  light:"var(--green-light)",  text:"#1c7a4e" },
+  warn:   { label:"주의",     color:"var(--warn)",   light:"var(--warn-light)",   text:"#a06a00" },
+  danger: { label:"매우 위험", color:"var(--danger)", light:"var(--danger-light)", text:"#c23434" },
+};
+
+function renderTouristFilters(){
+  const wrap = document.getElementById('tourist-filters');
+  wrap.innerHTML = touristTypes.map(t =>
+    `<button class="filter-chip ${t === activeSpotType ? 'active' : ''}" onclick="setSpotFilter('${t}')">${t}</button>`
+  ).join('');
+}
+function setSpotFilter(type){
+  activeSpotType = type;
+  renderTouristFilters();
+  renderTouristResults(document.getElementById('tourist-search').value);
+}
+
+function renderTouristResults(query){
+  const q = query.trim();
+  const wrap = document.getElementById('tourist-results');
+  let list = touristSpots.filter(s => activeSpotType === "전체" || s.type === activeSpotType);
+  if(q) list = list.filter(s => s.name.includes(q) || s.cat.includes(q));
+  if(!q && activeSpotType === "전체") list = list.slice(0, 5);
+
+  if(list.length === 0){
+    wrap.innerHTML = `<div class="card spot-empty">'${escapeHtml(q)}'와(과) 일치하는 관광지가 없어요</div>`;
+    return;
+  }
+  wrap.innerHTML =
+    (!q ? `<div class="hint-label">${activeSpotType === "전체" ? "현재 있는 관광지 · 인기순" : activeSpotType + " · " + list.length + "곳"}</div>` : `<div class="hint-label">검색 결과 ${list.length}건</div>`) +
+    list.map(s => {
+      const idx = touristSpots.indexOf(s);
+      const rm = riskMeta[s.risk];
+      return `
+        <div class="card spot-item" data-idx="${idx}" onclick="selectTouristSpot(${idx})">
+          <div class="sp-ic" style="background:${rm.light};"><svg viewBox="0 0 24 24" style="color:${rm.text}"><use href="#ic-landmark"/></svg></div>
+          <div class="sp-info">
+            <div class="sp-name">${escapeHtml(s.name)}</div>
+            <div class="sp-cat">${escapeHtml(s.cat)}</div>
+          </div>
+          <span class="pill" style="background:${rm.light}; color:${rm.text};">${rm.label}</span>
+        </div>
+      `;
+    }).join('');
+}
+
+function selectTouristSpot(idx){
+  const spot = touristSpots[idx];
+  const rm = riskMeta[spot.risk];
+
+  if(poiMarker){ map.removeLayer(poiMarker); }
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="lf-pin-wrap"><div class="lf-pin" style="background:${rm.color};"><svg viewBox="0 0 24 24"><use href="#ic-landmark"/></svg></div><div class="lf-pin-label">${escapeHtml(spot.name)}</div></div>`,
+    iconSize: [0, 0],
+    iconAnchor: [15, 40],
+  });
+  poiMarker = L.marker([spot.lat, spot.lng], { icon }).addTo(map);
+  map.flyTo([spot.lat, spot.lng], 13, { duration: 0.8 });
+
+  document.querySelectorAll('.spot-item').forEach(el => el.classList.toggle('selected', Number(el.dataset.idx) === idx));
+  document.getElementById('real-map').scrollIntoView({ behavior:'smooth', block:'center' });
+  showToast(`지도로 이동했어요 · ${spot.name} (${rm.label})`);
+}
+
+/* ---------------- real map (Leaflet + OpenStreetMap) ---------------- */
+let map, poiMarker, mapInitialized = false;
+
+const pestIconMap = { mosquito:'ic-mosquito', tick:'ic-tick', bee:'ic-bee' };
+
+function plotRegionalRiskMarkers(){
+  regionalRiskSpots.forEach(spot => {
+    const rm = riskMeta[spot.risk];
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="lf-pin-wrap"><div class="lf-pin" style="background:${rm.color};"><svg viewBox="0 0 32 32"><use href="#${pestIconMap[spot.pest]}"/></svg></div><div class="lf-pin-label">${escapeHtml(spot.name)}</div></div>`,
+      iconSize: [0, 0],
+      iconAnchor: [15, 40],
+    });
+    const marker = L.marker([spot.lat, spot.lng], { icon }).addTo(map);
+    marker.bindPopup(`<b>${escapeHtml(spot.name)}</b><br>${escapeHtml(spot.cat)}<br>${escapeHtml(spot.desc)}`);
+    regionalMarkers.push(marker);
+  });
+}
+let regionalMarkers = [];
+
+function renderRegionalRiskList(){
+  const wrap = document.getElementById('regional-risk-list');
+  wrap.innerHTML = regionalRegions.map(region => {
+    const spots = regionalRiskSpots.filter(s => s.region === region);
+    return `
+      <div class="region-subheader">${escapeHtml(region)}</div>
+      ${spots.map(spot => {
+        const rm = riskMeta[spot.risk];
+        return `
+          <div class="card zone-list-item" onclick="focusRegionalSpot('${spot.name}')">
+            <div class="ric" style="background:${rm.light};"><svg viewBox="0 0 32 32" style="color:${rm.text}"><use href="#${pestIconMap[spot.pest]}"/></svg></div>
+            <div>
+              <div class="nm">${escapeHtml(spot.name)}</div>
+              <div class="lv">${rm.label} · ${escapeHtml(spot.cat.split(' · ')[0])}</div>
+              <div class="desc">${escapeHtml(spot.desc)}</div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    `;
+  }).join('');
+}
+function focusRegionalSpot(name){
+  const spot = regionalRiskSpots.find(s => s.name === name);
+  if(!spot || !map) return;
+  map.flyTo([spot.lat, spot.lng], 14, { duration: 0.8 });
+  document.getElementById('real-map').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function initMap(){
+  map = L.map('real-map', { zoomControl:false, attributionControl:true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+  L.control.zoom({ position:'topright' }).addTo(map);
+  plotRegionalRiskMarkers();
+  focusRegionalArea(false);
+}
+
+function focusRegionalArea(animate = true){
+  const bounds = L.latLngBounds(regionalRiskSpots.map(s => [s.lat, s.lng]));
+  if(animate){
+    map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 12, duration: 0.8 });
+  } else {
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+  }
+}
+
+/* ---------------- tab nav ---------------- */
+function switchTab(tab){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+tab).classList.add('active');
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+
+  if(tab === 'map'){
+    if(!mapInitialized){
+      mapInitialized = true;
+      initMap();
+      setTimeout(() => { map.invalidateSize(); focusRegionalArea(false); }, 150);
+    } else {
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+  }
+}
+
+/* ---------------- toast ---------------- */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2000);
+}
+
+/* ---------------- points ---------------- */
+function refreshPoints(){
+  document.getElementById('quiz-pt-label').textContent = points;
+  document.getElementById('exchange-pt-label').textContent = points;
+  renderShop();
+}
+
+/* ---------------- report board ---------------- */
+function renderReports(){
+  const list = document.getElementById('report-list');
+  list.innerHTML = reports.map(r => `
+    <div class="card report-item">
+      <div class="head">
+        <div class="title">${escapeHtml(r.title)}</div>
+        <span class="pill ${r.status==='확인됨' ? 'green' : 'warn'}">${r.status}</span>
+      </div>
+      <div class="body">${escapeHtml(r.body)}</div>
+      <div class="meta"><svg viewBox="0 0 24 24"><use href="#ic-pin"/></svg>${escapeHtml(r.loc)} &nbsp;·&nbsp; ${r.date}</div>
+    </div>
+  `).join('');
+}
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function openReportForm(){ document.getElementById('form-overlay').classList.add('open'); }
+function closeReportForm(){
+  document.getElementById('form-overlay').classList.remove('open');
+  document.getElementById('f-title').value='';
+  document.getElementById('f-loc').value='';
+  document.getElementById('f-body').value='';
+}
+function submitReport(){
+  const title = document.getElementById('f-title').value.trim();
+  const loc = document.getElementById('f-loc').value.trim();
+  const body = document.getElementById('f-body').value.trim();
+  if(!title || !loc || !body){ showToast('모든 항목을 입력해주세요'); return; }
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
+  reports.unshift({ title, loc, body, date: dateStr, status:"검토중" });
+  renderReports();
+  closeReportForm();
+  showToast('제보가 접수되었습니다. 감사합니다!');
+}
+
+/* ---------------- quiz ---------------- */
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i=a.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+function startQuiz(level){
+  const data = quizBank[level];
+  const questions = shuffleArray(data.qs).slice(0, data.per);
+  quizState = { level, idx:0, correct:0, answered:false, questions };
+  document.getElementById('quiz-select-view').style.display='none';
+  document.getElementById('quiz-result-view').style.display='none';
+  document.getElementById('quiz-play-view').style.display='block';
+  document.getElementById('quiz-level-title').textContent = level + ' 퀴즈';
+  renderQuizProgress();
+  renderQuizQuestion();
+}
+function renderQuizProgress(){
+  const total = quizState.questions.length;
+  const wrap = document.getElementById('quiz-progress');
+  wrap.innerHTML = '';
+  for(let i=0;i<total;i++){
+    const seg = document.createElement('div');
+    seg.className = 'seg' + (i < quizState.idx ? ' done' : '');
+    wrap.appendChild(seg);
+  }
+}
+function renderQuizQuestion(){
+  const data = quizBank[quizState.level];
+  const q = quizState.questions[quizState.idx];
+  quizState.answered = false;
+
+  const shuffledOpts = shuffleArray(q.opts.map((text, i) => ({ text, isCorrect: i === q.a })));
+  quizState.currentOpts = shuffledOpts;
+
+  const area = document.getElementById('quiz-question-area');
+  area.innerHTML = `
+    <div class="card quiz-q-card">
+      <div class="qnum">문제 ${quizState.idx+1} / ${quizState.questions.length}</div>
+      <div class="qtext">${escapeHtml(q.q)}</div>
+      <div id="opt-list">
+        ${shuffledOpts.map((o,i)=>`<div class="opt" data-i="${i}" onclick="answerQuiz(${i})"><div class="k">${String.fromCharCode(65+i)}</div><div>${escapeHtml(o.text)}</div></div>`).join('')}
+      </div>
+      <div class="quiz-feedback" id="quiz-feedback"></div>
+    </div>
+  `;
+}
+function answerQuiz(i){
+  if(quizState.answered) return;
+  quizState.answered = true;
+  const data = quizBank[quizState.level];
+  const shuffledOpts = quizState.currentOpts;
+  const correctIdx = shuffledOpts.findIndex(o => o.isCorrect);
+  const opts = document.querySelectorAll('#opt-list .opt');
+  opts.forEach(o=>{
+    const idx = Number(o.dataset.i);
+    if(idx === correctIdx) o.classList.add('correct');
+    else if(idx === i && idx !== correctIdx) o.classList.add('wrong');
+  });
+  const fb = document.getElementById('quiz-feedback');
+  if(i === correctIdx){
+    quizState.correct++;
+    points += data.pt;
+    fb.textContent = `정답이에요! +${data.pt}P 획득`;
+    fb.style.color = '#1c7a4e';
+  } else {
+    fb.textContent = '아쉬워요, 정답은 초록색으로 표시된 항목이에요';
+    fb.style.color = '#c23434';
+  }
+  refreshPoints();
+  setTimeout(()=>{
+    quizState.idx++;
+    if(quizState.idx < quizState.questions.length){
+      renderQuizProgress();
+      renderQuizQuestion();
+    } else {
+      finishQuiz();
+    }
+  }, 1100);
+}
+function finishQuiz(){
+  document.getElementById('quiz-play-view').style.display='none';
+  document.getElementById('quiz-result-view').style.display='block';
+  const data = quizBank[quizState.level];
+  const earned = quizState.correct * data.pt;
+  document.getElementById('quiz-result-text').textContent =
+    `${quizState.questions.length}문제 중 ${quizState.correct}문제 정답 · +${earned}P 획득`;
+}
+function backToQuizSelect(){
+  document.getElementById('quiz-result-view').style.display='none';
+  document.getElementById('quiz-select-view').style.display='block';
+}
+
+/* ---------------- exchange ---------------- */
+function renderShopGrid(items, gridId){
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = items.map(item => `
+    <div class="card shop-card">
+      <div class="ic-wrap"><svg viewBox="0 0 24 24" style="color:var(--primary-dark)"><use href="#${item.icon}"/></svg></div>
+      <div class="nm">${item.name}</div>
+      <div class="cost">${item.cost}P</div>
+      <button class="btn ${points>=item.cost?'primary':'ghost'}" ${points>=item.cost?'':'disabled'} onclick="exchangeItem('${item.id}')">교환하기</button>
+    </div>
+  `).join('');
+}
+function renderShop(){
+  renderShopGrid(shopItems.filter(i => i.cat === 'prevention'), 'shop-grid');
+  renderShopGrid(shopItems.filter(i => i.cat === 'summer'), 'shop-grid-summer');
+}
+function exchangeItem(id){
+  const item = shopItems.find(i => i.id === id);
+  if(!item) return;
+  if(points < item.cost){ showToast('포인트가 부족해요'); return; }
+  points -= item.cost;
+  refreshPoints();
+  showToast(`${item.name} 교환 완료! 남은 포인트 ${points}P`);
+}
+
+/* ---------------- init ---------------- */
+renderReports();
+refreshPoints();
+renderTouristFilters();
+renderTouristResults('');
+renderRegionalRiskList();
+</script>
+</body>
+</html>
